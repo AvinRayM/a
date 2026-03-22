@@ -11,7 +11,7 @@ app.use(cors());
 
 // ✅ FIXED: Using the correct model name
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+const model = genAI.getGenerativeModel({ model: "	gemini-3-flash-preview" });
 
 let lastGeneratedData = null;
 let lastPrompt = "";
