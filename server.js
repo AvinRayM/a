@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.static('public')); // Serves the web UI
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "Gemini 3.1 Pro" });
+const model = genAI.getGenerativeModel({ model: "Gemini 2.5 Flash" });
 
 // Store the last generated JSON in memory
 let lastGeneratedData = null;
