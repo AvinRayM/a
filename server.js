@@ -6,90 +6,85 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Increase limit to 50MB for massive AI responses
+app.use(express.json({ limit: '50mb' }));
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Allow large AI responses
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
 let lastGeneratedData = null;
 
-// 🧠 THE "GOD MODE" PROMPT
 const SYSTEM_PROMPT = `
-You are a ROBLOX ENGINE ARCHITECT (Senior Level). 
-You do not write basic code. You write PRODUCTION-READY, MODULAR, SCALABLE systems.
+You are a ROBLOX ENGINE ARCHITECT.
+You must output a SINGLE valid JSON object.
 
-### 1. ARCHITECTURE RULES
-- **Modularization:** Use 'ModuleScripts' in ReplicatedStorage for shared logic (DataTypes, Configs).
-- **Security:** Never trust the client. Validate all RemoteEvent arguments on the Server.
-- **Safety:** Always use 'WaitForChild()' on the client. Always use 'pcall' for DataStore or HTTP calls.
-- **Cleanup:** Scripts should clean up connections if destroyed (basic Maid pattern).
-
-### 2. UI DESIGN STANDARDS (MANDATORY)
-- **Style:** Modern, Flat, Minimalist. Dark Mode by default.
-- **Components:**
-  - ALWAYS use 'UICorner' (CornerRadius: 0, 8).
-  - ALWAYS use 'UIStroke' (Thickness: 2, ApplyStrokeMode: Border).
-  - ALWAYS use 'UIPadding' inside frames.
-  - ALWAYS use 'UIListLayout' or 'UIGridLayout' for organizing lists.
-- **Positioning:** Use AnchorPoint(0.5, 0.5) and Position(0.5, 0, 0.5, 0) to center elements perfectly.
-- **Colors:** Use pleasing Hex colors (e.g., Background: #1E1E24, Accent: #4F46E5, Text: #F3F4F6).
-
-### 3. OUTPUT JSON STRUCTURE
-Return a SINGLE JSON object.
+RULES:
+1. NO Markdown. NO Explanations. NO text before or after the JSON.
+2. If the user asks for "Best" or "Long", generate fully functional, professional scripts.
+3. STRUCTURE:
 {
   "root_tasks": [
     {
       "class": "ClassName",
       "name": "Name",
-      "parent": "ParentService", 
-      "properties": { "PropName": "Value" },
-      "attributes": { "AttrKey": "AttrValue" }, 
-      "tags": ["Tag1", "Tag2"],
-      "source": "LUA CODE HERE...",
-      "children": [ ...recursive... ]
+      "parent": "ParentService",
+      "properties": { "Color": "#FF0000", "Size": [4,1,4], "Anchored": true },
+      "source": "Lua Code Here",
+      "children": [ ... ]
     }
   ]
 }
-
-### 4. DATA TYPE FORMATS
-- **Color3:** "#RRGGBB" (Hex String)
-- **Vector3:** [x, y, z]
-- **UDim2:** [scaleX, offsetX, scaleY, offsetY]
-- **Enum:** String name of EnumItem (e.g., "GothamBold", "MouseButton1")
-
-### USER PROMPT HANDLING
-If the user asks for a complex system (e.g. "Shop"), generate:
-1. A **ModuleScript** (Config) in ReplicatedStorage.
-2. A **RemoteEvent** in ReplicatedStorage.
-3. A **ServerScript** in ServerScriptService (Using the Module).
-4. A **ScreenGui** in StarterGui with LocalScript (Using the Module).
-
-WRITE EXTENSIVE, PROFESSIONAL LUA CODE.
+4. MODULES: Use ModuleScripts in ReplicatedStorage for complex logic.
+5. UI: Use UICorner, UIStroke, and UIGradient.
 `;
 
 app.post('/generate', async (req, res) => {
     try {
         const { prompt } = req.body;
-        console.log(`[AI] Architecting High-Level System: ${prompt}`);
+        console.log(`[AI] Processing Heavy Request: ${prompt}`);
 
         const result = await model.generateContent(`${SYSTEM_PROMPT}\n\nUSER REQUEST: ${prompt}`);
         const response = await result.response;
-        
-        let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        // JSON Repair Logic
-        const first = text.indexOf('{');
-        const last = text.lastIndexOf('}');
-        if (first !== -1 && last !== -1) text = text.substring(first, last + 1);
+        let text = response.text();
 
-        const jsonResponse = JSON.parse(text);
-        lastGeneratedData = jsonResponse;
+        console.log("[AI] Raw Response Length:", text.length);
+
+        // 1. EXTRACT JSON ONLY (Removes "Here is your code..." chat)
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
         
+        if (!jsonMatch) {
+            throw new Error("AI did not return JSON. It returned text/chat instead.");
+        }
+
+        let cleanJson = jsonMatch[0];
+
+        // 2. PARSE JSON
+        let jsonResponse;
+        try {
+            jsonResponse = JSON.parse(cleanJson);
+        } catch (e) {
+            console.error("JSON Parse Failed. Attempting repair...");
+            // If AI forgot the last '}', add it
+            if (!cleanJson.trim().endsWith("}")) {
+                cleanJson += "]} }"; // Try to close root task
+                try {
+                     jsonResponse = JSON.parse(cleanJson);
+                } catch (e2) {
+                    throw new Error("AI generated broken JSON. Try a simpler prompt or try again.");
+                }
+            } else {
+                 throw new Error("JSON Syntax Error in AI response.");
+            }
+        }
+
+        lastGeneratedData = jsonResponse;
         res.json({ success: true, data: jsonResponse });
+
     } catch (error) {
-        console.error("AI Error:", error);
-        res.status(500).json({ success: false, error: "AI complexity limit reached or invalid format." });
+        console.error("CRITICAL ERROR:", error.message);
+        // Send the ACTUAL error to the frontend so you can see it
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -98,4 +93,4 @@ app.get('/latest', (req, res) => {
     res.json(lastGeneratedData);
 });
 
-app.listen(PORT, () => console.log(`🚀 Pro Architect running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Pro Server Running on ${PORT}`));
